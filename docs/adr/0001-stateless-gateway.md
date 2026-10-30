@@ -10,9 +10,10 @@ latency, survive restarts without losing data, and scale beyond one process.
 
 ## Decision
 
-The gateway process keeps no request state. Durable data (policies, audit
-records, findings) lives in PostgreSQL; shared fast state (rate-limit counters,
-policy cache) lives in Redis.
+The gateway process keeps no request state. Durable data (audit records and
+findings, metadata only) lives in PostgreSQL; shared fast state (rate-limit
+counters) lives in Redis. Policies are YAML files read from disk and validated
+against a schema, so they can be versioned in git and reviewed like code.
 
 ## Alternatives considered
 
