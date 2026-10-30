@@ -444,6 +444,65 @@ td { padding: 9px 14px; vertical-align: middle; }
 .fine { color: var(--muted); font-size: 12px; text-align: center; }
 .form-error { color: var(--c-blocked); font-size: 12.5px; }
 
+/* Console polish */
+.content > * { animation: rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.content > *:nth-child(2) { animation-delay: 0.05s; }
+.content > *:nth-child(3) { animation-delay: 0.1s; }
+.content > *:nth-child(4) { animation-delay: 0.15s; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+.panel, .kpis { transition: border-color 0.2s, box-shadow 0.2s; }
+.panel:hover { border-color: var(--border-strong); box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12); }
+.brand svg { filter: drop-shadow(0 0 10px color-mix(in srgb, var(--c-clean) 45%, transparent)); }
+.sidebar nav a { transition: background 0.15s, color 0.15s, transform 0.15s; }
+.sidebar nav a:hover { transform: translateX(2px); }
+.kpi-row strong { background: linear-gradient(180deg, var(--text), color-mix(in srgb, var(--text) 70%, var(--muted))); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* Login polish */
+.login { position: relative; overflow: hidden; --mx: 30%; --my: 30%; }
+.login-glow { position: absolute; inset: 0; z-index: 0; pointer-events: none; background:
+  radial-gradient(520px circle at var(--mx) var(--my), color-mix(in srgb, var(--focus) 13%, transparent), transparent 60%),
+  radial-gradient(700px circle at 8% 100%, color-mix(in srgb, var(--c-clean) 9%, transparent), transparent 60%); }
+.login-aside, .login-panel { position: relative; z-index: 1; }
+.login-aside { border-right-color: color-mix(in srgb, var(--border) 70%, transparent); }
+.eyebrow { display: inline-block; margin-bottom: 16px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border-strong); color: var(--text-2); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; background: color-mix(in srgb, var(--surface) 70%, transparent); }
+.grad { background: linear-gradient(95deg, var(--text) 10%, var(--c-clean) 90%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.login-copy { max-width: 560px; }
+.login-copy ul.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+.chips li { padding: 4px 11px; border-radius: 999px; border: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 70%, transparent); font-size: 12px; color: var(--text-2); }
+.chips li::before { display: none; }
+
+.stream { margin-top: 28px; border: 1px solid var(--border-strong); border-radius: 14px; background: color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter: blur(10px); box-shadow: var(--shadow); overflow: hidden; }
+.stream-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 560; color: var(--text-2); }
+.stream-head em { margin-left: auto; font-style: normal; font-weight: 400; color: var(--muted); }
+.pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--c-clean); box-shadow: 0 0 0 0 color-mix(in srgb, var(--c-clean) 60%, transparent); animation: pulse 2s ease-out infinite; }
+@keyframes pulse { 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.stream ul { list-style: none; margin: 0; padding: 6px 0; min-height: 268px; }
+.stream-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 14px; transition: opacity 0.4s; animation: rowIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes rowIn { from { transform: translateY(-14px); opacity: 0; } }
+.stream-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tone); }
+.stream-meta { display: flex; gap: 10px; font-size: 12px; color: var(--muted); }
+.stream-meta b { color: var(--text); font-weight: 560; }
+.stream-row code { display: block; margin-top: 2px; font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stream-tag { padding: 2px 9px; border-radius: 6px; font-size: 11.5px; font-weight: 560; color: var(--tone); background: color-mix(in srgb, var(--tone) 14%, transparent); }
+.stream-row::before { display: none; }
+.stream-row { padding-left: 14px; }
+.tone-clean { --tone: var(--c-clean); }
+.tone-redacted { --tone: var(--c-redacted); }
+.tone-blocked { --tone: var(--c-blocked); }
+
+.form-mark { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 11px; border: 1px solid var(--border-strong); background: var(--surface-2); margin-bottom: 8px; }
+.login-panel form { padding: 28px; border: 1px solid var(--border); border-radius: 16px; background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(12px); box-shadow: var(--shadow); width: min(420px, 100%); }
+.field { position: relative; display: flex; }
+.field input { flex: 1; padding-right: 58px; }
+.field.invalid input { border-color: var(--c-blocked); }
+.reveal { position: absolute; right: 6px; top: 6px; height: 28px; padding: 0 10px; border-radius: 7px; font-size: 12px; color: var(--text-2); }
+.reveal:hover { background: var(--surface-3); color: var(--text); }
+.form-hint { color: var(--c-redacted); font-size: 12px; }
+.primary { transition: transform 0.15s, opacity 0.15s; }
+.primary:active:not(:disabled) { transform: scale(0.985); }
+.login-foot { position: absolute; bottom: 20px; display: flex; gap: 8px; color: var(--muted); font-size: 12px; }
+.login-foot a:hover { color: var(--text); text-decoration: underline; }
+
 /* Responsive */
 @media (max-width: 1100px) {
   .grid-main, .grid-secondary { grid-template-columns: 1fr; }
@@ -462,6 +521,11 @@ td { padding: 9px 14px; vertical-align: middle; }
   .palette-button span, .palette-button kbd { display: none; }
   .login { grid-template-columns: 1fr; }
   .login-aside { padding: 24px; gap: 24px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .login-copy .stream, .login-copy p { display: none; }
+  .login-aside { gap: 18px; }
+  .login-panel { padding: 20px 16px 64px; }
+  .login-panel form { padding: 20px; }
+  .login-foot { bottom: 18px; }
   .feed li button { grid-template-columns: 100px 1fr 56px; }
   .feed-meta, .feed li button .sev { display: none; }
 }

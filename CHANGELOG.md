@@ -10,6 +10,8 @@ All notable changes are documented here. The format follows
 - Redesigned operator dashboard: Overview, Traffic and Findings views, request
   detail drawer, command palette (Ctrl/⌘+K), keyboard navigation, dark/light
   themes, latency percentiles, CSV export and a built-in sample-data mode.
+- New sign-in screen with an illustrative inspection stream, key reveal toggle,
+  Caps Lock hint and entrance animations across the console.
 
 ## [1.0.0]
 

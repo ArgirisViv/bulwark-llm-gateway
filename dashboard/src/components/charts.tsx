@@ -29,7 +29,7 @@ type TimelineProps = {
 export function Timeline({ buckets, onSelect, active }: TimelineProps) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
-  const height = 232;
+  const height = 300;
   const pad = { top: 12, right: 8, bottom: 26, left: 34 };
   const innerW = Math.max(10, width - pad.left - pad.right);
   const innerH = height - pad.top - pad.bottom;
