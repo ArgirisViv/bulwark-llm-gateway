@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Node
+node_modules/
+dashboard/dist/
+
+# Secrets and local config
+.env
+*.pem
+*.key
+
+# Editors / OS
+.idea/
+.DS_Store
+Thumbs.db
+
+eval/reports/

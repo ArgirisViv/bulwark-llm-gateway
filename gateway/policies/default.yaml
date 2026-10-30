@@ -1,0 +1,16 @@
+app: default
+version: 1
+mode: enforce
+rules:
+  - detector: injection.*
+    min_severity: high
+    action: block
+  - detector: pii
+    action: redact
+  - detector: secrets
+    action: redact
+  - detector: canary
+    action: block
+  - detector: "*"
+    action: log
+on_detector_error: allow

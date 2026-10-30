@@ -1,0 +1,81 @@
+x-hardened: &hardened
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  gateway:
+    <<: *hardened
+    build: ./gateway
+    env_file: .env
+    command: ["sh", "-c", "alembic upgrade head && uvicorn bulwark.main:app --host 0.0.0.0 --port 8080 --proxy-headers"]
+    # Bound to loopback by default; set BULWARK_BIND_ADDRESS=0.0.0.0 behind a TLS proxy.
+    ports:
+      - "${BULWARK_BIND_ADDRESS:-127.0.0.1}:${BULWARK_GATEWAY_PORT:-8080}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  dashboard:
+    <<: *hardened
+    build: ./dashboard
+    ports:
+      - "${BULWARK_BIND_ADDRESS:-127.0.0.1}:${BULWARK_DASHBOARD_PORT:-3000}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      gateway:
+        condition: service_healthy
+
+  postgres:
+    <<: *hardened
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bulwark}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bulwark}
+      POSTGRES_DB: ${POSTGRES_DB:-bulwark}
+    # Postgres drops privileges to its own user at start-up and needs these.
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-bulwark}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    <<: *hardened
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    # The entrypoint drops to the redis user, which needs these.
+    cap_add:
+      - SETUID
+      - SETGID
+      - CHOWN
+    read_only: true
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
