@@ -41,7 +41,7 @@ Teams ship LLM features faster than they can review what flows through them. Pro
 | **Streaming** | SSE inspection per choice and field (`content`, `refusal`, `tool_calls`, legacy `function_call`) with a tail buffer and flush on completion |
 | **Policy engine** | Hot-reloaded, schema-validated YAML. First-match-wins rules, `enforce` and `monitor` modes, configurable fail-open or fail-closed on detector errors |
 | **Rate limiting** | Redis fixed-window limits per application; fails closed when Redis is unavailable |
-| **Audit and metrics** | PostgreSQL metadata-only audit (decisions, findings, latency, token counts), Prometheus metrics, React operator dashboard |
+| **Audit and metrics** | PostgreSQL metadata-only audit (decisions, findings, latency, token counts), Prometheus metrics, React operator dashboard (traffic explorer, findings matrix, command palette, dark/light themes, sample-data mode) |
 
 ## Architecture
 

@@ -6,6 +6,11 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Redesigned operator dashboard: Overview, Traffic and Findings views, request
+  detail drawer, command palette (Ctrl/⌘+K), keyboard navigation, dark/light
+  themes, latency percentiles, CSV export and a built-in sample-data mode.
+
 ## [1.0.0]
 
 ### Added

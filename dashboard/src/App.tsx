@@ -1,284 +1,348 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Drawer } from "./components/Drawer";
+import { Findings } from "./components/Findings";
+import { IconCommand, IconFindings, IconLogout, IconMoon, IconOverview, IconRefresh, IconSun, IconTraffic, Logo } from "./components/icons";
+import { Login } from "./components/Login";
+import { Overview, type Model } from "./components/Overview";
+import { Palette, type Command } from "./components/Palette";
+import { Traffic } from "./components/Traffic";
+import { Kbd } from "./components/ui";
+import { useNow, useSnapshot, useTheme } from "./hooks";
+import { applyFilters, toCsv } from "./lib/filters";
+import { RANGES, RANGE_LABEL, fmtInt, relTime } from "./lib/format";
+import { EMPTY_FILTERS, type AuditRequest, type Filters, type Outcome, type Source, type View } from "./types";
 
-type Finding = {
-  detector: string;
-  category: string;
-  severity: string;
-  action: string;
-  direction: string;
-};
+const KEY = "bulwark-api-key";
+const VIEWS: { id: View; title: string; subtitle: string }[] = [
+  { id: "overview", title: "Overview", subtitle: "Traffic, decisions and latency at a glance" },
+  { id: "traffic", title: "Traffic", subtitle: "Every audited request, searchable and filterable" },
+  { id: "findings", title: "Findings", subtitle: "What the detectors caught, by category and severity" },
+];
 
-type AuditRequest = {
-  id: string;
-  application_id: string;
-  model: string;
-  decision: string;
-  latency_ms: number;
-  upstream_latency_ms: number | null;
-  tokens_in: number | null;
-  tokens_out: number | null;
-  created_at: string;
-  findings: Finding[];
-};
-
-type AuditSummary = {
-  window_hours: number;
-  requests: number;
-  decisions: Record<string, number>;
-  findings: { category: string; severity: string; action: string; count: number }[];
-};
-
-type GatewayMetrics = {
-  requests: number;
-  averageLatencyMs: number;
-};
-
-function parsePrometheus(text: string): GatewayMetrics {
-  let requests = 0;
-  let durationTotal = 0;
-  let durationCount = 0;
-  for (const line of text.split("\n")) {
-    if (line.startsWith("bulwark_http_requests_total{")) {
-      const value = Number(line.slice(line.lastIndexOf("}") + 1).trim());
-      if (Number.isFinite(value)) requests += value;
-    } else if (line.startsWith("bulwark_http_request_duration_seconds_sum{")) {
-      const value = Number(line.slice(line.lastIndexOf("}") + 1).trim());
-      if (Number.isFinite(value)) durationTotal += value;
-    } else if (line.startsWith("bulwark_http_request_duration_seconds_count{")) {
-      const value = Number(line.slice(line.lastIndexOf("}") + 1).trim());
-      if (Number.isFinite(value)) durationCount += value;
-    }
-  }
-  return {
-    requests,
-    averageLatencyMs: durationCount ? (durationTotal / durationCount) * 1000 : 0,
-  };
-}
-
-function decisionLabel(value: string): string {
-  return value.replace(/_/g, " ");
+function viewFromHash(): View {
+  const hash = window.location.hash.replace(/^#\/?/, "");
+  return VIEWS.some((view) => view.id === hash) ? (hash as View) : "overview";
 }
 
 export default function App() {
-  const [apiKey, setApiKey] = useState(() => sessionStorage.getItem("bulwark-api-key") ?? "");
-  const [draftKey, setDraftKey] = useState(apiKey);
-  const [summary, setSummary] = useState<AuditSummary | null>(null);
-  const [requests, setRequests] = useState<AuditRequest[]>([]);
-  const [metrics, setMetrics] = useState<GatewayMetrics | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [source, setSource] = useState<Source | null>(() => {
+    if (new URLSearchParams(window.location.search).has("demo")) return { kind: "demo" };
+    const key = sessionStorage.getItem(KEY);
+    return key ? { kind: "live", key } : null;
+  });
+  const [loginError, setLoginError] = useState("");
+  const [hours, setHours] = useState<number>(24);
+  const [live, setLive] = useState(true);
+  const [view, setView] = useState<View>(viewFromHash);
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [toast, setToast] = useState("");
+  const [theme, toggleTheme] = useTheme();
+  const now = useNow();
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  const loadDashboard = useCallback(async () => {
-    if (!apiKey) return;
-    setLoading(true);
-    setError("");
-    try {
-      const headers = { Authorization: `Bearer ${apiKey}` };
-      const [summaryResponse, auditResponse, metricsResponse] = await Promise.all([
-        fetch("/api/v1/audit/summary?hours=24", { headers }),
-        fetch("/api/v1/audit/recent?limit=50", { headers }),
-        fetch("/api/metrics"),
-      ]);
-      if (summaryResponse.status === 401 || auditResponse.status === 401) {
-        throw new Error("Gateway API key was rejected. Check the key and try again.");
-      }
-      if (!summaryResponse.ok || !auditResponse.ok) {
-        throw new Error("The gateway could not load audit data. Check that it is ready.");
-      }
-      if (!metricsResponse.ok) throw new Error("The gateway metrics endpoint is unavailable.");
-      const summaryData = (await summaryResponse.json()) as AuditSummary;
-      const auditData = (await auditResponse.json()) as { data: AuditRequest[] };
-      const metricsText = await metricsResponse.text();
-      setSummary(summaryData);
-      setRequests(auditData.data);
-      setMetrics(parsePrometheus(metricsText));
-      setUpdatedAt(new Date());
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to load dashboard data.");
-    } finally {
-      setLoading(false);
-    }
-  }, [apiKey]);
+  const disconnect = useCallback((message = "") => {
+    sessionStorage.removeItem(KEY);
+    setSource(null);
+    setSelectedId(null);
+    setFilters(EMPTY_FILTERS);
+    setLoginError(message);
+  }, []);
+
+  const { snapshot, error, loading, refresh } = useSnapshot(source, hours, live, () =>
+    disconnect("The gateway rejected this API key."),
+  );
 
   useEffect(() => {
-    if (!apiKey) return;
-    void loadDashboard();
-    const timer = window.setInterval(() => void loadDashboard(), 30_000);
-    return () => window.clearInterval(timer);
-  }, [apiKey, loadDashboard]);
+    const onHash = () => setView(viewFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
-  const totals = useMemo(() => {
-    const decisions = summary?.decisions ?? {};
-    return {
-      blocked: (decisions.blocked ?? 0) + (decisions.rate_limited ?? 0),
-      redacted: summary?.findings
-        .filter((finding) => finding.action === "redact")
-        .reduce((total, finding) => total + finding.count, 0) ?? 0,
-      allowed: decisions.allowed ?? 0,
-    };
-  }, [summary]);
+  const go = useCallback((next: View) => {
+    window.location.hash = `/${next}`;
+    setView(next);
+  }, []);
 
-  function connect(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const nextKey = draftKey.trim();
-    if (!nextKey) return;
-    sessionStorage.setItem("bulwark-api-key", nextKey);
-    setApiKey(nextKey);
-  }
+  const notify = useCallback((message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast((current) => (current === message ? "" : current)), 2200);
+  }, []);
 
-  function disconnect() {
-    sessionStorage.removeItem("bulwark-api-key");
-    setApiKey("");
-    setSummary(null);
-    setRequests([]);
-    setMetrics(null);
-    setDraftKey("");
-  }
+  const model = useMemo<Model | null>(() => {
+    if (!snapshot) return null;
+    const at = snapshot.fetchedAt;
+    const windowStart = at - hours * 3_600_000;
+    const rows = snapshot.requests.filter((request) => Date.parse(request.created_at) >= windowStart);
+    const oldest = snapshot.requests.reduce((min, request) => Math.min(min, Date.parse(request.created_at)), at);
+    const truncated = snapshot.requests.length >= 100 && oldest > windowStart;
+    return { rows, now: at, domainFrom: truncated ? oldest : windowStart, truncated };
+  }, [snapshot, hours]);
 
-  if (!apiKey) {
+  const filtered = useMemo(
+    () =>
+      model
+        ? applyFilters(model.rows, filters).sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+        : [],
+    [model, filters],
+  );
+  const apps = useMemo(() => [...new Set((model?.rows ?? []).map((row) => row.application_id))].sort(), [model]);
+
+  const selected = useMemo(
+    () => (selectedId ? snapshot?.requests.find((request) => request.id === selectedId) ?? null : null),
+    [selectedId, snapshot],
+  );
+  const selectedIndex = selected ? filtered.findIndex((request) => request.id === selected.id) : -1;
+
+  const step = useCallback(
+    (delta: number) => {
+      if (selectedIndex < 0) return;
+      const next = filtered[selectedIndex + delta];
+      if (next) setSelectedId(next.id);
+    },
+    [filtered, selectedIndex],
+  );
+
+  const copy = useCallback(
+    (text: string) => {
+      void navigator.clipboard?.writeText(text).then(
+        () => notify("Copied to clipboard"),
+        () => notify("Copy is not available in this context"),
+      );
+    },
+    [notify],
+  );
+
+  const exportCsv = useCallback(() => {
+    const blob = new Blob([toCsv(filtered)], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `bulwark-audit-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    notify(`Exported ${filtered.length} rows`);
+  }, [filtered, notify]);
+
+  const focusSearch = useCallback(() => {
+    go("traffic");
+    window.setTimeout(() => searchRef.current?.focus(), 30);
+  }, [go]);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      const typing = target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName);
+      if (paletteOpen || typing || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key === "/") {
+        event.preventDefault();
+        focusSearch();
+      } else if (event.key === "Escape") {
+        setSelectedId(null);
+      } else if (selectedId && (event.key === "j" || event.key === "ArrowDown")) {
+        event.preventDefault();
+        step(1);
+      } else if (selectedId && (event.key === "k" || event.key === "ArrowUp")) {
+        event.preventDefault();
+        step(-1);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [paletteOpen, selectedId, step, focusSearch]);
+
+  const openFiltered = useCallback(
+    (next: Partial<Filters>) => {
+      setFilters({ ...EMPTY_FILTERS, ...next });
+      go("traffic");
+    },
+    [go],
+  );
+
+  const commands = useMemo<Command[]>(
+    () => [
+      ...VIEWS.map((item) => ({ id: `go-${item.id}`, group: "Go to", title: item.title, run: () => go(item.id) })),
+      { id: "search", group: "Action", title: "Search requests", hint: "/", run: focusSearch },
+      { id: "refresh", group: "Action", title: "Refresh data now", run: () => void refresh() },
+      { id: "live", group: "Action", title: live ? "Pause live updates" : "Resume live updates", run: () => setLive((value) => !value) },
+      { id: "theme", group: "Action", title: theme === "dark" ? "Switch to light theme" : "Switch to dark theme", run: toggleTheme },
+      { id: "blocked", group: "Filter", title: "Show blocked requests", run: () => openFiltered({ decisions: ["blocked"] }) },
+      { id: "redacted", group: "Filter", title: "Show redacted requests", run: () => openFiltered({ decisions: ["redacted"] }) },
+      { id: "errors", group: "Filter", title: "Show upstream errors", run: () => openFiltered({ decisions: ["error"] }) },
+      ...RANGES.map((range) => ({
+        id: `range-${range}`,
+        group: "Time range",
+        title: `Last ${RANGE_LABEL[range]}`,
+        run: () => setHours(range),
+      })),
+      { id: "export", group: "Action", title: "Export current table as CSV", run: exportCsv },
+      { id: "disconnect", group: "Session", title: "Disconnect", run: () => disconnect() },
+    ],
+    [go, focusSearch, refresh, live, theme, toggleTheme, openFiltered, exportCsv, disconnect],
+  );
+
+  if (!source) {
     return (
-      <main className="connect-page">
-        <div className="connect-card">
-          <div className="brand-mark">B</div>
-          <p className="eyebrow">SECURITY GATEWAY</p>
-          <h1>Welcome to Bulwark</h1>
-          <p className="muted">
-            Connect to your gateway to review security decisions and request activity.
-            Your key stays in this browser tab.
-          </p>
-          <form onSubmit={connect} className="key-form">
-            <label htmlFor="api-key">Gateway API key</label>
-            <input
-              id="api-key"
-              type="password"
-              autoComplete="current-password"
-              value={draftKey}
-              onChange={(event) => setDraftKey(event.target.value)}
-              placeholder="Enter your gateway key"
-              required
-            />
-            <button type="submit">Connect to gateway <span aria-hidden="true">→</span></button>
-          </form>
-          {error && <p className="error-message" role="alert">{error}</p>}
-          <p className="privacy-note">Audit views contain metadata only. Prompts and responses are never stored.</p>
-        </div>
-      </main>
+      <Login
+        error={loginError}
+        onConnect={(key) => {
+          sessionStorage.setItem(KEY, key);
+          setLoginError("");
+          setSource({ kind: "live", key });
+        }}
+        onDemo={() => {
+          setLoginError("");
+          setSource({ kind: "demo" });
+        }}
+      />
     );
   }
 
+  const current = VIEWS.find((item) => item.id === view) ?? VIEWS[0];
+  const activeWindow = filters.from !== null && filters.to !== null ? { from: filters.from, to: filters.to } : null;
+  const status = error ? "error" : loading && !snapshot ? "loading" : live ? "live" : "paused";
+
   return (
-    <main className="shell">
-      <header className="topbar">
-        <a className="brand" href="/" aria-label="Bulwark dashboard">
-          <span className="brand-mark small">B</span>
-          <span>bulwark<span className="brand-dot">.</span></span>
-        </a>
-        <div className="top-actions">
-          <span className="connection"><i /> Gateway connected</span>
-          <button className="quiet-button" onClick={disconnect}>Disconnect</button>
+    <div className="app">
+      <aside className="sidebar">
+        <div className="brand">
+          <Logo size={22} />
+          <span>Bulwark</span>
         </div>
-      </header>
-
-      <section className="page-heading">
-        <div>
-          <p className="eyebrow">OPERATIONS OVERVIEW</p>
-          <h1>Security dashboard</h1>
-          <p className="muted">Monitor gateway traffic and policy decisions across your applications.</p>
-        </div>
-        <div className="refresh-area">
-          <span className="updated">{updatedAt ? `Updated ${updatedAt.toLocaleTimeString()}` : "Waiting for data"}</span>
-          <button className="refresh-button" onClick={() => void loadDashboard()} disabled={loading}>
-            <span aria-hidden="true" className={loading ? "spin" : ""}>↻</span>
-            {loading ? "Refreshing" : "Refresh"}
+        <nav aria-label="Primary">
+          {VIEWS.map((item) => (
+            <a
+              key={item.id}
+              href={`#/${item.id}`}
+              className={view === item.id ? "is-active" : ""}
+              aria-current={view === item.id ? "page" : undefined}
+            >
+              {item.id === "overview" && <IconOverview />}
+              {item.id === "traffic" && <IconTraffic />}
+              {item.id === "findings" && <IconFindings />}
+              <span>{item.title}</span>
+              {item.id === "traffic" && model && <em>{fmtInt(model.rows.length)}</em>}
+            </a>
+          ))}
+        </nav>
+        <div className="sidebar-foot">
+          {source.kind === "demo" && <div className="demo-note">Viewing generated sample data</div>}
+          <button type="button" onClick={toggleTheme}>
+            {theme === "dark" ? <IconSun /> : <IconMoon />}
+            <span>{theme === "dark" ? "Light theme" : "Dark theme"}</span>
           </button>
+          <button type="button" onClick={() => disconnect()}>
+            <IconLogout />
+            <span>Disconnect</span>
+          </button>
+          <div className="version">v1.0.0 · metadata-only audit</div>
         </div>
-      </section>
+      </aside>
 
-      {error && <div className="alert" role="alert">{error}</div>}
+      <div className="main">
+        <header className="topbar">
+          <div className="titles">
+            <h1>{current.title}</h1>
+            <p>{current.subtitle}</p>
+          </div>
+          <div className="controls">
+            <div className="segmented" role="group" aria-label="Time range">
+              {RANGES.map((range) => (
+                <button
+                  key={range}
+                  type="button"
+                  className={hours === range ? "is-on" : ""}
+                  aria-pressed={hours === range}
+                  onClick={() => setHours(range)}
+                >
+                  {RANGE_LABEL[range]}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className={`status status-${status}`}
+              onClick={() => setLive((value) => !value)}
+              title={live ? "Live updates every 15 s. Click to pause." : "Updates paused. Click to resume."}
+            >
+              <i />
+              {status === "error"
+                ? "Connection issue"
+                : status === "paused"
+                  ? "Paused"
+                  : snapshot
+                    ? `Live · ${relTime(snapshot.fetchedAt, now)}`
+                    : "Connecting"}
+            </button>
+            <button type="button" className="icon-button" onClick={() => void refresh()} aria-label="Refresh now" title="Refresh now">
+              <span className={loading ? "spin" : ""}><IconRefresh /></span>
+            </button>
+            <button type="button" className="palette-button" onClick={() => setPaletteOpen(true)}>
+              <IconCommand size={14} />
+              <span>Command</span>
+              <Kbd>Ctrl K</Kbd>
+            </button>
+          </div>
+        </header>
 
-      <section className="metrics-grid" aria-label="24 hour summary">
-        <article className="metric-card">
-          <div className="metric-top"><span>Requests · 24h</span><span className="metric-icon blue">↗</span></div>
-          <strong>{summary?.requests ?? "—"}</strong>
-          <small>Across all applications</small>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top"><span>Blocked</span><span className="metric-icon red">⊘</span></div>
-          <strong>{summary ? totals.blocked : "—"}</strong>
-          <small>Blocked by policy or rate limit</small>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top"><span>Redacted</span><span className="metric-icon amber">✳</span></div>
-          <strong>{summary ? totals.redacted : "—"}</strong>
-          <small>Redacted findings</small>
-        </article>
-        <article className="metric-card">
-          <div className="metric-top"><span>Avg. gateway latency</span><span className="metric-icon green">◷</span></div>
-          <strong>{metrics ? <>{metrics.averageLatencyMs.toFixed(1)}<small> ms</small></> : "—"}</strong>
-          <small>{metrics ? `${metrics.requests} requests since process start` : "Prometheus process metrics"}</small>
-        </article>
-      </section>
+        {error && (
+          <div className="banner" role="alert">
+            <strong>{error}</strong>
+            <button type="button" onClick={() => void refresh()}>Retry</button>
+          </div>
+        )}
 
-      <section className="content-grid">
-        <article className="panel activity-panel">
-          <div className="panel-heading">
-            <div><h2>Recent requests</h2><p>Metadata-only audit activity</p></div>
-            <span className="count-pill">{requests.length} shown</span>
-          </div>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr><th>Decision</th><th>Application / model</th><th>Findings</th><th>Latency</th><th>Time</th></tr>
-              </thead>
-              <tbody>
-                {requests.map((item) => (
-                  <tr key={item.id}>
-                    <td><span className={`badge ${item.decision}`}>{decisionLabel(item.decision)}</span></td>
-                    <td><strong>{item.application_id}</strong><small>{item.model}</small></td>
-                    <td>
-                      {item.findings.length
-                        ? <span className="finding-count">{item.findings.length} · {item.findings.map((finding) => finding.category).join(", ")}</span>
-                        : <span className="muted">None</span>}
-                    </td>
-                    <td>{item.latency_ms.toFixed(0)} ms</td>
-                    <td className="time-cell">{new Date(item.created_at).toLocaleString()}</td>
-                  </tr>
-                ))}
-                {!requests.length && !loading && (
-                  <tr><td className="empty-row" colSpan={5}>No audit requests in the database yet.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </article>
+        <main className="content">
+          {!snapshot || !model ? (
+            <div className="skeletons" aria-busy="true">
+              <div className="sk-row">{[0, 1, 2, 3].map((i) => <div key={i} className="sk" />)}</div>
+              <div className="sk sk-tall" />
+            </div>
+          ) : view === "overview" ? (
+            <Overview
+              snapshot={snapshot}
+              model={model}
+              activeWindow={activeWindow}
+              onSelectBucket={(bucket) => openFiltered({ from: bucket.start, to: bucket.end })}
+              onPickOutcome={(outcome: Outcome) => openFiltered({ decisions: [outcome] })}
+              onOpen={(request: AuditRequest) => setSelectedId(request.id)}
+              onGo={go}
+              onPickCategory={(category) => openFiltered({ q: category })}
+            />
+          ) : view === "traffic" ? (
+            <Traffic
+              rows={filtered}
+              total={model.rows.length}
+              apps={apps}
+              filters={filters}
+              onFilters={setFilters}
+              selectedId={selectedId}
+              onOpen={(request) => setSelectedId(request.id)}
+              onExport={exportCsv}
+              now={now}
+              searchRef={searchRef}
+            />
+          ) : (
+            <Findings summary={snapshot.summary} onPickCategory={(category) => openFiltered({ q: category })} />
+          )}
+        </main>
+      </div>
 
-        <aside className="panel findings-panel">
-          <div className="panel-heading">
-            <div><h2>Top findings</h2><p>Last 24 hours</p></div>
-            <span className="shield-icon">◇</span>
-          </div>
-          <div className="finding-list">
-            {(summary?.findings ?? []).map((finding) => (
-              <div className="finding-row" key={`${finding.category}-${finding.severity}`}>
-                <span className={`severity-dot ${finding.severity}`} />
-                <div><strong>{finding.category}</strong><small>{finding.severity} severity</small></div>
-                <b>{finding.count}</b>
-              </div>
-            ))}
-            {!summary?.findings.length && <p className="empty-findings">No findings recorded in this window.</p>}
-          </div>
-          <div className="policy-note">
-            <span className="policy-icon">✓</span>
-            <div><strong>Policy enforcement active</strong><small>Decisions are recorded as metadata only.</small></div>
-          </div>
-        </aside>
-      </section>
-
-      <footer>
-        <span><i className="footer-dot" /> Live updates every 30 seconds</span>
-        <span>Prometheus metrics available at <code>/metrics</code></span>
-      </footer>
-    </main>
+      <Drawer
+        request={selected}
+        position={selectedIndex >= 0 ? { index: selectedIndex, total: filtered.length } : null}
+        onClose={() => setSelectedId(null)}
+        onStep={step}
+        onCopy={copy}
+      />
+      {paletteOpen && <Palette commands={commands} onClose={() => setPaletteOpen(false)} />}
+      {toast && <div className="toast" role="status">{toast}</div>}
+    </div>
   );
 }
