@@ -6,7 +6,37 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Per-application keys (`BULWARK_APP_KEYS`) with per-application policies
+  (`BULWARK_POLICY_DIR`), rate limits and audit identity. The dashboard audit
+  API accepts only the operator key.
+- Request `tools` and legacy `functions` definitions are inspected and
+  redacted like message content.
+- `BULWARK_CANARY_ENABLED` to turn off canary injection.
+
+### Fixed
+- Audit records for blocked requests and responses (including streams) now
+  include the finding that caused the block and those found before it.
+  Previously they were stored with no findings.
+- Detector timeouts are now enforced. Detectors are synchronous and run on a
+  worker pool; the previous asyncio-only timeout could never interrupt them, so
+  `on_detector_error` never triggered. Per-sample detector latency rises from
+  about 0.2 ms to 0.5 ms (p50) as a result.
+
 ### Changed
+- The canary is appended to the request's leading system or developer prompt
+  instead of adding a second system message, so a leaked system prompt leaks
+  the canary too.
+- Policies are cached and re-validated only when the file changes.
+- Breaking for custom detectors: `Detector.inspect` is now a regular
+  (non-async) method.
+- Dashboard visual overhaul ("holographic command center"): an illustrative
+  "firewall" backdrop (packets on circuit traces inspected at nodes: passed,
+  redacted or blocked), hex grid revealed around the cursor, hex data rain and a
+  scan beam; threat radar plotting every loaded request by time and latency, live
+  decision ticker, count-up KPIs with 3D tilt and spotlight, neon charts, a one-time
+  boot sequence, and self-hosted Space Grotesk and JetBrains Mono fonts. All motion
+  is disabled under `prefers-reduced-motion`; the strict CSP is unchanged.
 - Redesigned operator dashboard: Overview, Traffic and Findings views, request
   detail drawer, command palette (Ctrl/⌘+K), keyboard navigation, dark/light
   themes, latency percentiles, CSV export and a built-in sample-data mode.

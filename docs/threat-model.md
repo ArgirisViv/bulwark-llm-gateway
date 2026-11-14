@@ -32,8 +32,12 @@ key and the audit trail.
 - Prompt-injection detection is heuristic. The harness corpus shows that
   non-English phrasing and paraphrases without trigger words are missed
   (`inj-016`, `inj-017`). Treat Bulwark as one layer, not a guarantee.
-- Detectors time out at `BULWARK_DETECTOR_TIMEOUT_SECONDS`; `on_detector_error`
-  decides whether that fails open (`allow`) or closed (`block`).
+- Detectors run on a bounded worker pool and time out at
+  `BULWARK_DETECTOR_TIMEOUT_SECONDS`; `on_detector_error` decides whether that
+  fails open (`allow`) or closed (`block`). A thread cannot be killed, so an
+  overrunning detector keeps its worker until it finishes; sustained overruns
+  exhaust the pool, after which every inspection times out and the same policy
+  setting applies.
 - Streaming leakage that spans more than `BULWARK_RESPONSE_TAIL_BUFFER_CHARS`
   characters of one token can evade pattern detectors.
 - Content is held back only per field; a model can still split a secret across
