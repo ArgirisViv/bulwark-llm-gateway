@@ -84,7 +84,7 @@ export function Traffic({ rows, total, apps, filters, onFilters, selectedId, onO
   );
 
   return (
-    <section className="panel traffic">
+    <section className="panel traffic fx-card">
       <div className="toolbar">
         <label className="search">
           <IconSearch size={14} />

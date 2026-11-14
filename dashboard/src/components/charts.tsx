@@ -24,12 +24,12 @@ type TimelineProps = {
   buckets: Bucket[];
   onSelect: (bucket: Bucket) => void;
   active: { from: number; to: number } | null;
+  height?: number;
 };
 
-export function Timeline({ buckets, onSelect, active }: TimelineProps) {
+export function Timeline({ buckets, onSelect, active, height = 300 }: TimelineProps) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
-  const height = 300;
   const pad = { top: 12, right: 8, bottom: 26, left: 34 };
   const innerW = Math.max(10, width - pad.left - pad.right);
   const innerH = height - pad.top - pad.bottom;
@@ -45,6 +45,14 @@ export function Timeline({ buckets, onSelect, active }: TimelineProps) {
   return (
     <div className="timeline" ref={ref}>
       <svg width={width} height={height} role="img" aria-label="Requests over time by outcome">
+        <defs>
+          {OUTCOMES.map((outcome) => (
+            <linearGradient key={outcome} id={`tl-${outcome}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" className={`stop-${outcome} stop-top`} />
+              <stop offset="100%" className={`stop-${outcome} stop-bottom`} />
+            </linearGradient>
+          ))}
+        </defs>
         {ticks.map((tick) => {
           const y = pad.top + innerH - tick * innerH;
           return (
@@ -61,7 +69,11 @@ export function Timeline({ buckets, onSelect, active }: TimelineProps) {
           let cursor = pad.top + innerH;
           const selected = active !== null && bucket.start >= active.from - 1 && bucket.end <= active.to + 1;
           return (
-            <g key={bucket.start} className={`bar-group${hover === index ? " is-hover" : ""}${selected ? " is-selected" : ""}`}>
+            <g
+              key={index}
+              className={`bar-group${hover === index ? " is-hover" : ""}${selected ? " is-selected" : ""}`}
+              style={{ animationDelay: `${index * 14}ms` }}
+            >
               <rect x={pad.left + index * slot} y={pad.top} width={slot} height={innerH} className="bar-hit" />
               {OUTCOMES.map((outcome) => {
                 const count = bucket.counts[outcome];
