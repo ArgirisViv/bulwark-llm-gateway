@@ -170,7 +170,7 @@ class PiiDetector:
     def __init__(self) -> None:
         self._analyzer = _build_presidio_analyzer()
 
-    async def inspect(self, ctx: InspectionContext) -> list[Finding]:
+    def inspect(self, ctx: InspectionContext) -> list[Finding]:
         view = ctx.view
         findings: list[Finding] = []
         if self._analyzer is None:

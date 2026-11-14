@@ -72,6 +72,11 @@ class InspectionContext:
 class Detector(Protocol):
     id: str
 
-    async def inspect(self, ctx: InspectionContext) -> list[Finding]:
-        """Must be side-effect free and respect the per-detector timeout."""
+    def inspect(self, ctx: InspectionContext) -> list[Finding]:
+        """Synchronous and side-effect free.
+
+        Detectors are CPU-bound, so the gateway runs each one on a worker thread and
+        enforces the per-detector timeout from the event loop. They must not touch
+        shared mutable state.
+        """
         ...

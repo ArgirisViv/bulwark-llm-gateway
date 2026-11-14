@@ -30,7 +30,7 @@ _PATTERNS = (
 class HeuristicInjectionDetector:
     id = "injection.heuristic"
 
-    async def inspect(self, ctx: InspectionContext) -> list[Finding]:
+    def inspect(self, ctx: InspectionContext) -> list[Finding]:
         if ctx.direction != Direction.REQUEST:
             return []
 

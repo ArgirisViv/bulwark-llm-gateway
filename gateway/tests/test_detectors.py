@@ -20,7 +20,7 @@ from bulwark.detectors.secrets import SecretDetector
     ],
 )
 async def test_injection_detector_finds_normalized_attacks(text: str) -> None:
-    findings = await HeuristicInjectionDetector().inspect(
+    findings = HeuristicInjectionDetector().inspect(
         InspectionContext("test", Direction.REQUEST, text)
     )
 
@@ -30,7 +30,7 @@ async def test_injection_detector_finds_normalized_attacks(text: str) -> None:
 
 
 async def test_pii_detector_finds_email_and_valid_greek_afm() -> None:
-    findings = await PiiDetector().inspect(
+    findings = PiiDetector().inspect(
         InspectionContext("test", Direction.REQUEST, "mail alice@example.com AFM 094259216")
     )
 
@@ -39,9 +39,7 @@ async def test_pii_detector_finds_email_and_valid_greek_afm() -> None:
 
 
 async def test_pii_detector_rejects_invalid_greek_afm_checksum() -> None:
-    findings = await PiiDetector().inspect(
-        InspectionContext("test", Direction.REQUEST, "AFM 123456789")
-    )
+    findings = PiiDetector().inspect(InspectionContext("test", Direction.REQUEST, "AFM 123456789"))
 
     assert not any(finding.category == "gr_afm" for finding in findings)
 
@@ -55,13 +53,13 @@ async def test_pii_detector_rejects_invalid_greek_afm_checksum() -> None:
     ],
 )
 async def test_pii_detector_validates_formatted_identifiers(text: str, category: str) -> None:
-    findings = await PiiDetector().inspect(InspectionContext("test", Direction.REQUEST, text))
+    findings = PiiDetector().inspect(InspectionContext("test", Direction.REQUEST, text))
 
     assert category in {finding.category for finding in findings}
 
 
 async def test_pii_detector_rejects_invalid_card_checksum() -> None:
-    findings = await PiiDetector().inspect(
+    findings = PiiDetector().inspect(
         InspectionContext("test", Direction.REQUEST, "Card 4111 1111 1111 1112")
     )
 
@@ -70,7 +68,7 @@ async def test_pii_detector_rejects_invalid_card_checksum() -> None:
 
 async def test_secret_detector_finds_provider_key_pattern() -> None:
     secret = "sk-" + "A" * 24
-    findings = await SecretDetector().inspect(
+    findings = SecretDetector().inspect(
         InspectionContext("test", Direction.RESPONSE, f"token={secret}")
     )
 
@@ -80,7 +78,7 @@ async def test_secret_detector_finds_provider_key_pattern() -> None:
 
 
 async def test_secret_detector_finds_private_key_marker_and_entropy() -> None:
-    findings = await SecretDetector().inspect(
+    findings = SecretDetector().inspect(
         InspectionContext(
             "test",
             Direction.REQUEST,
@@ -96,7 +94,7 @@ async def test_secret_detector_finds_private_key_marker_and_entropy() -> None:
 
 async def test_canary_detector_finds_normalized_disclosure() -> None:
     canary_marker = "bw-AbCdEfGhIjKlMnOpQrStUvWxYz012345"
-    findings = await CanaryDetector().inspect(
+    findings = CanaryDetector().inspect(
         InspectionContext(
             "test",
             Direction.RESPONSE,
@@ -112,7 +110,7 @@ async def test_canary_detector_finds_normalized_disclosure() -> None:
 
 async def test_canary_detector_requires_response_direction_and_token() -> None:
     detector = CanaryDetector()
-    request_findings = await detector.inspect(
+    request_findings = detector.inspect(
         InspectionContext(
             "test",
             Direction.REQUEST,
@@ -120,9 +118,7 @@ async def test_canary_detector_requires_response_direction_and_token() -> None:
             metadata={"canary_token": "bw-AbCdEfGhIjKlMnOpQrStUvWxYz012345"},
         )
     )
-    no_token_findings = await detector.inspect(
-        InspectionContext("test", Direction.RESPONSE, "no marker")
-    )
+    no_token_findings = detector.inspect(InspectionContext("test", Direction.RESPONSE, "no marker"))
 
     assert request_findings == []
     assert no_token_findings == []
@@ -131,7 +127,7 @@ async def test_canary_detector_requires_response_direction_and_token() -> None:
 async def test_canary_detector_finds_single_character_mutation() -> None:
     canary_marker = "bw-AbCdEfGhIjKlMnOpQrStUvWxYz012345"
     mutated_marker = canary_marker[:-1] + "6"
-    findings = await CanaryDetector().inspect(
+    findings = CanaryDetector().inspect(
         InspectionContext(
             "test",
             Direction.RESPONSE,

@@ -9,7 +9,7 @@ from bulwark.detectors.base import Direction, Finding, InspectionContext, Severi
 class CanaryDetector:
     id = "canary"
 
-    async def inspect(self, ctx: InspectionContext) -> list[Finding]:
+    def inspect(self, ctx: InspectionContext) -> list[Finding]:
         if ctx.direction != Direction.RESPONSE:
             return []
         token = ctx.metadata.get("canary_token")
