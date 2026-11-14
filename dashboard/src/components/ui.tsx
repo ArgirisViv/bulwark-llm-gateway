@@ -28,7 +28,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={`panel ${className}`}>
+    <section className={`panel fx-card ${className}`}>
       <header className="panel-head">
         <div>
           <h2>{title}</h2>

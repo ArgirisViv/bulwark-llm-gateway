@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Drawer } from "./components/Drawer";
+import { Backdrop } from "./components/Backdrop";
+import { Boot, Ticker, reducedMotion, usePointerFx } from "./components/fx";
 import { Findings } from "./components/Findings";
 import { IconCommand, IconFindings, IconLogout, IconMoon, IconOverview, IconRefresh, IconSun, IconTraffic, Logo } from "./components/icons";
 import { Login } from "./components/Login";
+import { UNREACHABLE, verifyKey } from "./lib/api";
 import { Overview, type Model } from "./components/Overview";
 import { Palette, type Command } from "./components/Palette";
 import { Traffic } from "./components/Traffic";
@@ -13,6 +16,7 @@ import { RANGES, RANGE_LABEL, fmtInt, relTime } from "./lib/format";
 import { EMPTY_FILTERS, type AuditRequest, type Filters, type Outcome, type Source, type View } from "./types";
 
 const KEY = "bulwark-api-key";
+const BOOTED = "bulwark-booted";
 const VIEWS: { id: View; title: string; subtitle: string }[] = [
   { id: "overview", title: "Overview", subtitle: "Traffic, decisions and latency at a glance" },
   { id: "traffic", title: "Traffic", subtitle: "Every audited request, searchable and filterable" },
@@ -41,6 +45,20 @@ export default function App() {
   const [theme, toggleTheme] = useTheme();
   const now = useNow();
   const searchRef = useRef<HTMLInputElement>(null);
+  const [booting, setBooting] = useState(false);
+  const endBoot = useCallback(() => setBooting(false), []);
+  usePointerFx();
+
+  useEffect(() => {
+    if (!source || reducedMotion()) return;
+    try {
+      if (sessionStorage.getItem(BOOTED)) return;
+      sessionStorage.setItem(BOOTED, "1");
+    } catch {
+      return;
+    }
+    setBooting(true);
+  }, [source]);
 
   const disconnect = useCallback((message = "") => {
     sessionStorage.removeItem(KEY);
@@ -189,18 +207,27 @@ export default function App() {
 
   if (!source) {
     return (
-      <Login
-        error={loginError}
-        onConnect={(key) => {
-          sessionStorage.setItem(KEY, key);
-          setLoginError("");
-          setSource({ kind: "live", key });
-        }}
-        onDemo={() => {
-          setLoginError("");
-          setSource({ kind: "demo" });
-        }}
-      />
+      <>
+        <Backdrop />
+        <Login
+          error={loginError}
+          onConnect={async (key) => {
+            setLoginError("");
+            try {
+              await verifyKey(key);
+            } catch (reason) {
+              setLoginError(reason instanceof Error ? reason.message : UNREACHABLE);
+              return;
+            }
+            sessionStorage.setItem(KEY, key);
+            setSource({ kind: "live", key });
+          }}
+          onDemo={() => {
+            setLoginError("");
+            setSource({ kind: "demo" });
+          }}
+        />
+      </>
     );
   }
 
@@ -210,10 +237,19 @@ export default function App() {
 
   return (
     <div className="app">
+      <Backdrop />
+      {booting && <Boot onDone={endBoot} />}
       <aside className="sidebar">
         <div className="brand">
-          <Logo size={22} />
-          <span>Bulwark</span>
+          <span className="brand-mark"><Logo size={22} /></span>
+          <span className="brand-name">Bulwark</span>
+        </div>
+        <div className={`shield-status shield-${status}`}>
+          <span className="shield-orb"><i /><i /></span>
+          <div>
+            <b>{status === "error" ? "Link degraded" : status === "paused" ? "Feed paused" : "Shield online"}</b>
+            <span>{source.kind === "demo" ? "sample data" : "live gateway"}</span>
+          </div>
         </div>
         <nav aria-label="Primary">
           {VIEWS.map((item) => (
@@ -248,7 +284,7 @@ export default function App() {
       <div className="main">
         <header className="topbar">
           <div className="titles">
-            <h1>{current.title}</h1>
+            <h1 className="glitch" data-text={current.title} key={current.id}>{current.title}</h1>
             <p>{current.subtitle}</p>
           </div>
           <div className="controls">
@@ -291,14 +327,21 @@ export default function App() {
           </div>
         </header>
 
+        {model && <Ticker rows={model.rows} now={now} onOpen={(request) => setSelectedId(request.id)} />}
+
         {error && (
           <div className="banner" role="alert">
             <strong>{error}</strong>
-            <button type="button" onClick={() => void refresh()}>Retry</button>
+            <span className="banner-actions">
+              {source.kind === "live" && (
+                <button type="button" onClick={() => setSource({ kind: "demo" })}>Use sample data</button>
+              )}
+              <button type="button" onClick={() => void refresh()}>Retry</button>
+            </span>
           </div>
         )}
 
-        <main className="content">
+        <main className="content" key={view}>
           {!snapshot || !model ? (
             <div className="skeletons" aria-busy="true">
               <div className="sk-row">{[0, 1, 2, 3].map((i) => <div key={i} className="sk" />)}</div>

@@ -24,7 +24,7 @@ def _entropy(value: str) -> float:
 class SecretDetector:
     id = "secrets"
 
-    async def inspect(self, ctx: InspectionContext) -> list[Finding]:
+    def inspect(self, ctx: InspectionContext) -> list[Finding]:
         view = ctx.view
         matches: dict[tuple[int, int], tuple[str, float]] = {}
         for category, pattern, confidence in _PATTERNS:

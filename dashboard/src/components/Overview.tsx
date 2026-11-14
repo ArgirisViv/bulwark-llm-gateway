@@ -12,6 +12,8 @@ import {
 import { fmtCompact, fmtInt, fmtMs, fmtPct, label, relTime } from "../lib/format";
 import type { AuditRequest, Outcome, Snapshot, View } from "../types";
 import { Histogram, OutcomeBar, Sparkline, Timeline } from "./charts";
+import { CountUp } from "./fx";
+import { Radar } from "./Radar";
 import { IconArrow } from "./icons";
 import { DecisionBadge, Empty, Panel, Severity } from "./ui";
 
@@ -48,12 +50,14 @@ export function Overview({ snapshot, model, activeWindow, onSelectBucket, onPick
   const redacted = summary.findings.filter((f) => f.action === "redact").reduce((sum, f) => sum + f.count, 0);
   const blockRate = summary.requests ? (blocked / summary.requests) * 100 : 0;
   const maxCategory = Math.max(1, ...categories.map((row) => row.total));
+  const enforcement = summary.requests ? ((blocked + redacted) / summary.requests) * 100 : 0;
 
   const kpis = [
     {
       key: "requests",
       title: "Requests",
-      value: fmtCompact(summary.requests),
+      value: summary.requests,
+      format: (n: number) => fmtCompact(Math.round(n)),
       note: `${fmtInt(model.rows.length)} loaded for charts`,
       series: buckets.map((b) => b.total),
       tone: "neutral",
@@ -61,7 +65,8 @@ export function Overview({ snapshot, model, activeWindow, onSelectBucket, onPick
     {
       key: "blocked",
       title: "Blocked",
-      value: fmtInt(blocked),
+      value: blocked,
+      format: (n: number) => fmtInt(Math.round(n)),
       note: `${fmtPct(blockRate)} of traffic · policy and rate limits`,
       series: buckets.map((b) => b.counts.blocked),
       tone: "blocked",
@@ -69,7 +74,8 @@ export function Overview({ snapshot, model, activeWindow, onSelectBucket, onPick
     {
       key: "redacted",
       title: "Redactions",
-      value: fmtInt(redacted),
+      value: redacted,
+      format: (n: number) => fmtInt(Math.round(n)),
       note: "sensitive values removed before delivery",
       series: buckets.map((b) => b.counts.redacted),
       tone: "redacted",
@@ -77,7 +83,8 @@ export function Overview({ snapshot, model, activeWindow, onSelectBucket, onPick
     {
       key: "latency",
       title: "p95 latency",
-      value: latency.p95 ? fmtMs(latency.p95) : "—",
+      value: latency.p95,
+      format: (n: number) => (latency.p95 ? fmtMs(n) : "—"),
       note: `p50 ${latency.p50 ? fmtMs(latency.p50) : "—"}${metrics ? ` · avg ${fmtMs(metrics.averageLatencyMs)}` : ""}`,
       series: buckets.map((b) => b.total),
       tone: "latency",
@@ -88,10 +95,12 @@ export function Overview({ snapshot, model, activeWindow, onSelectBucket, onPick
     <div className="stack">
       <div className="kpis">
         {kpis.map((kpi) => (
-          <div className="kpi" key={kpi.key}>
+          <div className={`kpi fx-card fx-tilt kpi-${kpi.tone}`} key={kpi.key}>
             <div className="kpi-title">{kpi.title}</div>
             <div className="kpi-row">
-              <strong>{kpi.value}</strong>
+              <strong>
+                <CountUp value={kpi.value} format={kpi.format} />
+              </strong>
               <Sparkline values={kpi.series} tone={kpi.tone} />
             </div>
             <div className="kpi-note">{kpi.note}</div>
@@ -99,8 +108,27 @@ export function Overview({ snapshot, model, activeWindow, onSelectBucket, onPick
         ))}
       </div>
 
-      <div className="grid-main">
+      <div className="grid-hero">
         <Panel
+          title="Threat radar"
+          subtitle={`Every loaded request · last ${Math.max(1, Math.round((model.now - model.domainFrom) / 3_600_000))}h`}
+          className="panel-radar"
+          action={<span className="live-chip"><i />Live</span>}
+        >
+          <Radar rows={model.rows} from={model.domainFrom} now={model.now} onOpen={onOpen} />
+          <div className="shield-stats">
+            <div>
+              <span>Threats stopped</span>
+              <b><CountUp value={blocked + redacted} format={(n) => fmtInt(Math.round(n))} /></b>
+            </div>
+            <div>
+              <span>Enforcement rate</span>
+              <b><CountUp value={enforcement} format={(n) => fmtPct(n)} /></b>
+            </div>
+          </div>
+        </Panel>
+        <Panel
+          className="panel-timeline"
           title="Traffic by outcome"
           subtitle={
             model.truncated
@@ -118,34 +146,31 @@ export function Overview({ snapshot, model, activeWindow, onSelectBucket, onPick
             </ul>
           }
         >
-          <Timeline buckets={buckets} onSelect={onSelectBucket} active={activeWindow} />
+          <Timeline buckets={buckets} onSelect={onSelectBucket} active={activeWindow} height={480} />
         </Panel>
-
-        <div className="stack">
-          <Panel title="Outcomes" subtitle="Loaded requests">
-            <OutcomeBar counts={outcomeCounts} onPick={onPickOutcome} />
-          </Panel>
-          <Panel title="Latency distribution" subtitle="Gateway time per request">
-            <Histogram bins={latency.histogram} p50={latency.p50} p95={latency.p95} cap={latency.cap} />
-            <div className="percentiles">
-              <div>
-                <span><i className="dot dot-p50" />p50</span>
-                <b>{latency.p50 ? fmtMs(latency.p50) : "—"}</b>
-              </div>
-              <div>
-                <span><i className="dot dot-p95" />p95</span>
-                <b>{latency.p95 ? fmtMs(latency.p95) : "—"}</b>
-              </div>
-              <div>
-                <span>p99</span>
-                <b>{latency.p99 ? fmtMs(latency.p99) : "—"}</b>
-              </div>
-            </div>
-          </Panel>
-        </div>
       </div>
 
-      <div className="grid-secondary">
+      <div className="grid-3">
+        <Panel title="Outcomes" subtitle="Loaded requests">
+          <OutcomeBar counts={outcomeCounts} onPick={onPickOutcome} />
+        </Panel>
+        <Panel title="Latency distribution" subtitle="Gateway time per request">
+          <Histogram bins={latency.histogram} p50={latency.p50} p95={latency.p95} cap={latency.cap} />
+          <div className="percentiles">
+            <div>
+              <span><i className="dot dot-p50" />p50</span>
+              <b>{latency.p50 ? fmtMs(latency.p50) : "—"}</b>
+            </div>
+            <div>
+              <span><i className="dot dot-p95" />p95</span>
+              <b>{latency.p95 ? fmtMs(latency.p95) : "—"}</b>
+            </div>
+            <div>
+              <span>p99</span>
+              <b>{latency.p99 ? fmtMs(latency.p99) : "—"}</b>
+            </div>
+          </div>
+        </Panel>
         <Panel
           title="Top finding categories"
           action={
@@ -180,34 +205,35 @@ export function Overview({ snapshot, model, activeWindow, onSelectBucket, onPick
             <Empty title="No findings in this window" hint="Detectors have not flagged any traffic." />
           )}
         </Panel>
-
-        <Panel
-          title="Latest activity"
-          action={
-            <button className="link-button" type="button" onClick={() => onGo("traffic")}>
-              View all <IconArrow size={12} />
-            </button>
-          }
-        >
-          {model.rows.length ? (
-            <ul className="feed">
-              {model.rows.slice(0, 7).map((row) => (
-                <li key={row.id}>
-                  <button type="button" onClick={() => onOpen(row)}>
-                    <DecisionBadge decision={row.decision} />
-                    <span className="feed-app">{row.application_id}</span>
-                    <span className="feed-meta">{row.findings.length ? `${row.findings.length} finding${row.findings.length > 1 ? "s" : ""}` : ""}</span>
-                    <Severity severity={topSeverity(row)} />
-                    <time>{relTime(Date.parse(row.created_at), model.now)}</time>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <Empty title="No requests in this window" hint="Send traffic through the gateway to see it here." />
-          )}
-        </Panel>
       </div>
+
+      <Panel
+        title="Latest activity"
+        className="panel-latest"
+        action={
+          <button className="link-button" type="button" onClick={() => onGo("traffic")}>
+            View all <IconArrow size={12} />
+          </button>
+        }
+      >
+        {model.rows.length ? (
+          <ul className="feed">
+            {model.rows.slice(0, 7).map((row) => (
+              <li key={row.id}>
+                <button type="button" onClick={() => onOpen(row)}>
+                  <DecisionBadge decision={row.decision} />
+                  <span className="feed-app">{row.application_id}</span>
+                  <span className="feed-meta">{row.findings.length ? `${row.findings.length} finding${row.findings.length > 1 ? "s" : ""}` : ""}</span>
+                  <Severity severity={topSeverity(row)} />
+                  <time>{relTime(Date.parse(row.created_at), model.now)}</time>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <Empty title="No requests in this window" hint="Send traffic through the gateway to see it here." />
+        )}
+      </Panel>
     </div>
   );
 }

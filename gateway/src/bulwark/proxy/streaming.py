@@ -6,7 +6,6 @@ from typing import Any
 
 from bulwark.detectors.base import Direction
 from bulwark.policy.evaluator import FindingDecision, PolicyEvaluator
-from bulwark.policy.schema import PolicyAction
 from bulwark.providers.base import UpstreamProvider
 from bulwark.proxy.inspection import SecurityBlock, inspect_and_transform
 
@@ -43,6 +42,16 @@ def _decision_key(item: FindingDecision) -> tuple[str, str, str, tuple[tuple[int
     )
 
 
+def _merge_decisions(decisions: list[FindingDecision], found: list[FindingDecision]) -> None:
+    """The holdback buffer is re-inspected as it grows, so drop repeat findings."""
+    existing = {_decision_key(item) for item in decisions}
+    for item in found:
+        key = _decision_key(item)
+        if key not in existing:
+            decisions.append(item)
+            existing.add(key)
+
+
 async def _inspect_pending(
     pending: str,
     *,
@@ -53,27 +62,20 @@ async def _inspect_pending(
     metadata: dict[str, str],
     decisions: list[FindingDecision],
 ) -> str:
-    transformed, found = await inspect_and_transform(
-        pending,
-        app_id=app_id,
-        direction=Direction.RESPONSE,
-        detectors=detectors,
-        evaluator=evaluator,
-        timeout_seconds=timeout_seconds,
-        metadata=metadata,
-    )
-    existing = {_decision_key(item) for item in decisions}
-    for item in found:
-        key = _decision_key(item)
-        if key not in existing:
-            decisions.append(item)
-            existing.add(key)
-    if any(item.action == PolicyAction.BLOCK for item in found):
-        raise SecurityBlock(
-            Direction.RESPONSE,
-            found[0].finding.detector,
-            found[0].finding.category,
+    try:
+        transformed, found = await inspect_and_transform(
+            pending,
+            app_id=app_id,
+            direction=Direction.RESPONSE,
+            detectors=detectors,
+            evaluator=evaluator,
+            timeout_seconds=timeout_seconds,
+            metadata=metadata,
         )
+    except SecurityBlock as exc:
+        _merge_decisions(decisions, exc.decisions)
+        raise
+    _merge_decisions(decisions, found)
     return str(transformed)
 
 

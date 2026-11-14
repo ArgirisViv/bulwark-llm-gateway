@@ -1,4 +1,4 @@
-import asyncio
+import time
 from pathlib import Path
 
 import pytest
@@ -19,8 +19,9 @@ from bulwark.proxy.inspection import (
 class SlowDetector:
     id = "test.slow"
 
-    async def inspect(self, ctx: InspectionContext) -> list[Finding]:
-        await asyncio.sleep(0.02)
+    def inspect(self, ctx: InspectionContext) -> list[Finding]:
+        # Blocking, CPU-style work: an asyncio-only timeout could not interrupt this.
+        time.sleep(0.2)
         return []
 
 
@@ -44,7 +45,7 @@ async def test_detector_timeout_becomes_policy_finding() -> None:
         app_id="test",
         direction=Direction.REQUEST,
         detectors=(SlowDetector(),),
-        timeout_seconds=0.001,
+        timeout_seconds=0.02,
         metadata={},
     )
 
@@ -58,7 +59,7 @@ async def test_detector_timeout_can_be_configured_to_block() -> None:
         app_id="test",
         direction=Direction.REQUEST,
         detectors=(SlowDetector(),),
-        timeout_seconds=0.001,
+        timeout_seconds=0.02,
         metadata={},
     )
     evaluator = _evaluator(on_error="block")
@@ -71,7 +72,7 @@ async def test_detector_timeout_can_be_configured_to_block() -> None:
             direction=Direction.REQUEST,
             detectors=(SlowDetector(),),
             evaluator=evaluator,
-            timeout_seconds=0.001,
+            timeout_seconds=0.02,
             metadata={},
         )
     assert findings[0].category == "detector_error"

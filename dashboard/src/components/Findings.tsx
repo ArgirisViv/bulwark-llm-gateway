@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { SEVERITY_ORDER, groupFindings } from "../lib/analytics";
 import { fmtInt, label } from "../lib/format";
 import type { AuditSummary } from "../types";
+import { CountUp } from "./fx";
 import { Empty, Panel } from "./ui";
 
 type Props = { summary: AuditSummary; onPickCategory: (category: string) => void };
@@ -27,15 +28,15 @@ export function Findings({ summary, onPickCategory }: Props) {
   return (
     <div className="stack">
       <div className="kpis kpis-3">
-        <div className="kpi">
+        <div className="kpi fx-card fx-tilt kpi-neutral">
           <div className="kpi-title">Total findings</div>
-          <div className="kpi-row"><strong>{fmtInt(total)}</strong></div>
+          <div className="kpi-row"><strong><CountUp value={total} format={(n) => fmtInt(Math.round(n))} /></strong></div>
           <div className="kpi-note">across {rows.length} categories</div>
         </div>
         {actions.slice(0, 2).map(([action, count]) => (
-          <div className="kpi" key={action}>
+          <div className={`kpi fx-card fx-tilt kpi-${action === "block" ? "blocked" : action === "redact" ? "redacted" : "latency"}`} key={action}>
             <div className="kpi-title">Action: {action}</div>
-            <div className="kpi-row"><strong>{fmtInt(count)}</strong></div>
+            <div className="kpi-row"><strong><CountUp value={count} format={(n) => fmtInt(Math.round(n))} /></strong></div>
             <div className="kpi-note">{total ? ((count / total) * 100).toFixed(0) : 0}% of findings</div>
           </div>
         ))}
@@ -69,7 +70,7 @@ export function Findings({ summary, onPickCategory }: Props) {
                     return (
                       <td key={severity} className="num">
                         {count ? (
-                          <span className={`heat sev-${severity}`} style={{ opacity: 0.28 + 0.72 * (count / peak) }}>
+                          <span className={`heat sev-${severity}`} style={{ opacity: 0.35 + 0.65 * (count / peak), ["--heat" as string]: (count / peak).toFixed(2) }}>
                             {fmtInt(count)}
                           </span>
                         ) : (
